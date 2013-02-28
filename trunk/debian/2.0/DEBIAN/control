@@ -1,0 +1,10 @@
+Package: apache2-mod-ae
+Version: 0.16
+Section: base
+Priority: optional
+Architecture: all
+Depends: bash (>= 2.05a-11), coreutils (>= 5.0-5), apache2-threaded-dev, gcc
+Maintainer: Hartmut Vogler <it@guru.de>
+Description: Mod-Auth-AE
+ Authentifikation Server for any external programms
+ in apache enviroments.

@@ -1,0 +1,11 @@
+smb2passchk
+
+A tool, to check a username password combination against a
+WindowNT Domain.
+
+First build samba with the following configure line f.e.:
+
+configure --prefix=/opt/samba --with-libsmbclient --without-ssl
+
+Next you can build in examples/smb2passchk the tool with
+a simple 'make'

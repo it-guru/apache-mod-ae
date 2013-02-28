@@ -1,0 +1,85 @@
+#!/bin/bash
+#
+# acache:		Starts the acache
+#
+# chkconfig: 2345 10 10
+# processname: /apps/apache/sbin/acache
+# config: /etc/acache.conf
+#
+### BEGIN INIT INFO
+# Provides: acache
+# Required-Start: $syslog
+# Default-Stop: 0 1 6
+# Short-Description: Starts the acache Daemon for mod_auth_ae
+# Description:  acache Daemon for mod_auth_ae
+### END INIT INFO
+
+# Sanity checks.
+[ -f /etc/acache.conf ] || exit 0
+[ -x /apps/apache/sbin/acache ] || exit 0
+
+# Source function library.
+. /etc/init.d/functions
+
+## Source an auxiliary options file if we have one, and pick up NSCD_OPTIONS.
+#[ -r /etc/sysconfig/acache ] && . /etc/sysconfig/acache
+
+RETVAL=0
+prog=acache
+
+start () {
+#   for table in passwd group hosts
+#   do
+#   	if egrep -q '^'$table':.*nisplus' /etc/nsswitch.conf; then
+#   	    /usr/lib/acache_nischeck $table || secure="$secure -S $table,yes"
+#   	fi
+#   done
+    echo -n $"Starting $prog: "
+    daemon /apps/apache/sbin/acache 
+    RETVAL=$?
+    echo
+    return $RETVAL
+}
+
+stop () {
+    echo -n $"Stopping $prog: "
+    killall acache
+    echo
+    return $RETVAL
+}
+
+restart() {
+    stop
+    start
+}
+
+# See how we were called.
+case "$1" in
+    start)
+	start
+	RETVAL=$?
+	;;
+    stop)
+	stop
+	RETVAL=$?
+	;;
+    status)
+	status acache
+	RETVAL=$?
+	;;
+    restart)
+	restart
+	RETVAL=$?
+	;;
+    force-reload | reload)
+    	echo -n $"Reloading $prog: "
+	killproc /apps/apache/sbin/acache -HUP
+	RETVAL=$?
+	echo
+	;;
+    *)
+	echo $"Usage: $0 {start|stop|status|restart|reload|condrestart}"
+	RETVAL=1
+	;;
+esac
+exit $RETVAL

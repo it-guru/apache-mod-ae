@@ -1,0 +1,23 @@
+#!/bin/sh
+set -e
+
+update-rc.d acache defaults 90 92 >/dev/null
+
+# Add services entry if necessary
+getent group crontab > /dev/null 2>&1 || addgroup --system crontab
+
+chmod 600 /etc/aetools.conf
+chmod 600 /etc/acache.conf
+chmod 700 /usr/share/lib/acache
+
+if [ -x /etc/init.d/acache ]; then
+	if [ -x /usr/sbin/invoke-rc.d ] ; then
+	       invoke-rc.d acache start
+	else
+	       /etc/init.d/acache start
+	fi
+fi
+
+
+
+
