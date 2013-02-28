@@ -1,0 +1,24 @@
+#!/usr/bin/expect -f
+################################################################################
+# Parameter: $1 = User
+#            $2 = Share
+#            STDIN Passwort 
+################################################################################
+set timeout 3
+
+spawn smbclient [lindex $argv 1] -U [lindex $argv 0]
+match_max 100
+expect timeout {
+   exit 1
+} -exact "Password: " {
+   expect_user timeout {
+      exit 1
+   } -re "(.*)\n"
+   send "$expect_out(1,string)\r"
+}
+expect timeout {
+   exit 1
+} -re "Anonymous|login|successful|failed|ERR|noaccess|Access|denied"  {
+   send "quit\r" ; exit 1
+} "smb:" { send "quit\r" ; exit 0 }
+exit 1

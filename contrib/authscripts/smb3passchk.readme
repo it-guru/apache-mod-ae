@@ -1,0 +1,12 @@
+For optimal performance and work, you should create
+a ~/.smb/smb.conf file with the following value:
+
+[global]
+        unix charset = ISO-8859-1
+        encrypt passwords = Yes
+        wins support = No
+        interfaces = YOUR_PRIMARY_IP/YOUR_NETMASK
+        bind interfaces only = True
+        log level=0
+        debuglevel=0
+

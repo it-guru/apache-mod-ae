@@ -1,0 +1,30 @@
+#!/bin/sh
+# Start/stop the acache daemon.
+
+test -f /usr/sbin/acache || exit 0
+export HOME=/root
+
+case "$1" in
+start)  echo -n "Starting authserver: acache"
+        start-stop-daemon --start --quiet --pidfile /var/run/acache.pid --name acache --startas /usr/sbin/acache --
+        echo "." 
+        ;;
+stop)   echo -n "Stopping authserver: acache"
+        start-stop-daemon --stop --quiet --pidfile /var/run/acache.pid --name acache
+        echo "."
+        ;;
+restart) echo -n "Restarting periodic command scheduler: acache"
+        start-stop-daemon --stop --retry 5 --quiet --pidfile /var/run/acached.pid --name acache
+        start-stop-daemon --start --quiet --pidfile /var/run/acached.pid --name acache --startas /usr/sbin/acache --
+        echo "."
+        ;;
+reload|force-reload) echo -n "Reloading configuration files for periodic command scheduler: acache"
+        # acache reloads automatically
+        echo "."
+        ;;
+*)      echo "Usage: /etc/init.d/acache start|stop|restart|reload|force-reload"
+        exit 1
+        ;;
+esac
+exit 0
+

@@ -1,0 +1,13 @@
+AuthType               Basic
+AuthName               "Domainlogin (z.B.:sued/vogler.hartmut)"
+aeUserFileCheck        on
+aeAuthoritative        on
+aeUserFile             user.txt
+
+
+<Limit GET PUT POST>
+   require valid-user
+#   order deny,allow
+#   deny from all
+</Limit>
+
