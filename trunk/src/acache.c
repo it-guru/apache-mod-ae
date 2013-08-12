@@ -382,6 +382,13 @@ int GetAuthState(ServerConfig *cfg,char *loginname,char *Domain,
    char *commandargs[40];
    FILE *f;
 
+   if (strlen(loginname)>sizeof(cfg->c->entry[c].name)-1){
+      return(100);
+   }
+   if (strlen(password)>sizeof(cfg->c->entry[c].pass)-1){
+      return(101);
+   }
+
    strcpy(cmd,cfg->c->helper.entry[c].cmd);
    strchange(cmd,"%U",User);
    strchange(cmd,"%D",Domain);
