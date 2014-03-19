@@ -438,7 +438,11 @@ int GetAuthState(ServerConfig *cfg,char *loginname,char *Domain,
       cfg->c->loginok++;
    }
    else{
-      SetCacheStatus(cfg,loginname,password,1);
+      // SetCacheStatus(cfg,loginname,password,1); # Cache of invalid logins
+      //                                           # is not a good idea, because
+      //                                           # invalid responses in 
+      //                                           # backends are also cached
+      //                                           # (f.e. connect problems)
       cfg->c->loginfail++;
    }
    while(commandargs[pos]){
@@ -638,7 +642,7 @@ int MainServer(ServerConfig *cfg)
             }
          }
       }
-      if (lastclean+(maxctime/2)<time(NULL)){
+      if ((lastclean+(maxctime/2)<time(NULL))){
          lastclean=time(NULL);
          pid=fork();
          if (pid==0){
