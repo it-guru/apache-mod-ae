@@ -1,0 +1,3 @@
+#!/bin/sh
+export PATH=/opt/apache24/bin:$PATH
+apxs -a -c -I ../include -L ../lib -lacache authn_acache_module.c

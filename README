@@ -111,13 +111,16 @@ are startupscripts for different operating systems
 ----------------------
 
     aeUserFile             Filename for valid user list.
+                           (Switch NOT availabel starting from Apache 2.4)
                            default: none
                            
     aeUserFileCheck        Flag to enable the reading of 
                            the z.B. user.txt (aeUserFile)
+                           (Switch NOT availabel starting from Apache 2.4)
                            default: no
 
     aeAuthoritative        Sets the authoritative of ae_module.
+                           (Switch NOT availabel starting from Apache 2.4)
                            default: on
                            
     aeAccountToLower       Flag to enable the lower-conversion of
@@ -126,6 +129,7 @@ are startupscripts for different operating systems
 
     aeDomainSeperator      List of characters that are valid to 
                            seperate doamin from username.
+                           (Switch NOT availabel starting from Apache 2.4)
                            default: "/\_"
 
 
