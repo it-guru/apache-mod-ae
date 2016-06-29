@@ -1,0 +1,549 @@
+diff -rupN samba-3.5.22.org/source3/Makefile.in samba-3.5.22/source3/Makefile.in
+--- samba-3.5.22.org/source3/Makefile.in	2011-07-24 22:04:44.000000000 +0200
++++ samba-3.5.22/source3/Makefile.in	2013-02-26 16:32:02.000000000 +0100
+@@ -210,7 +210,7 @@ SBIN_PROGS = bin/smbd@EXEEXT@ bin/nmbd@E
+ 
+ ROOT_SBIN_PROGS = @CIFSMOUNT_PROGS@ @CIFSUMOUNT_PROGS@
+ 
+-BIN_PROGS1 = bin/smbclient@EXEEXT@ bin/net@EXEEXT@ bin/smbspool@EXEEXT@ \
++BIN_PROGS1 = bin/smbclient@EXEEXT@ smb3passchk/smb3passchk@EXEEXT@ bin/net@EXEEXT@ bin/smbspool@EXEEXT@ \
+ 	bin/testparm@EXEEXT@ bin/smbstatus@EXEEXT@ bin/smbget@EXEEXT@
+ BIN_PROGS2 = bin/smbcontrol@EXEEXT@ bin/smbtree@EXEEXT@ $(TDBBACKUP) \
+ 	bin/nmblookup@EXEEXT@ bin/pdbedit@EXEEXT@ $(TDBDUMP) \
+@@ -972,6 +972,19 @@ CLIENT_OBJ = $(CLIENT_OBJ1) $(PARAM_OBJ)
+              $(PASSDB_OBJ) $(SMBLDAP_OBJ) $(GROUPDB_OBJ) $(LDB_OBJ) \
+ 	     $(DISPLAY_SEC_OBJ)
+ 
++SMBPASS_OBJ1 = smb3passchk/smb3passchk.o $(RPC_CLIENT_OBJ) \
++            ../librpc/rpc/binding.o \
++            client/dnsbrowse.o \
++            $(RPC_CLIENT_OBJ1) \
++            $(RPC_PARSE_OBJ2)
++
++SMBPASS_OBJ = $(SMBPASS_OBJ1) $(PARAM_OBJ) $(LIBSMB_OBJ) \
++           $(LIB_NONSMBD_OBJ) $(KRBCLIENT_OBJ) $(LIBMSRPC_GEN_OBJ) \
++             $(READLINE_OBJ) $(POPT_LIB_OBJ) \
++             $(PASSDB_OBJ) $(SMBLDAP_OBJ) $(GROUPDB_OBJ) $(LDB_OBJ) \
++           $(DISPLAY_SEC_OBJ)
++ 
++
+ LIBSMBCONF_OBJ = ../lib/smbconf/smbconf.o \
+ 		 ../lib/smbconf/smbconf_util.o \
+ 		 ../lib/smbconf/smbconf_txt.o \
+@@ -1582,6 +1595,15 @@ bin/smbclient@EXEEXT@: $(BINARY_PREREQS)
+ 		$(KRB5LIBS) $(LDAP_LIBS) $(NSCD_LIBS) $(DNSSD_LIBS) \
+ 		$(LIBTALLOC_LIBS) $(LIBTDB_LIBS) $(LIBWBCLIENT_LIBS) $(ZLIB_LIBS)
+ 
++smb3passchk/smb3passchk@EXEEXT@: $(BINARY_PREREQS) $(SMBPASS_OBJ)  @BUILD_POPT@  $(LIBTALLOC) $(LIBTDB) $(LIBWBCLIENT) $(LIBSMBCLIENT)
++	@echo Linking $@
++	@$(CC) -o $@ $(SMBPASS_OBJ) $(LDFLAGS) $(DYNEXP) \
++		$(TERMLDFLAGS) $(TERMLIBS) $(LIBS) $(POPT_LIBS) \
++		$(KRB5LIBS) $(LDAP_LIBS) $(NSCD_LIBS) $(DNSSD_LIBS) \
++		$(LIBTALLOC_LIBS) $(LIBTDB_LIBS) $(LIBWBCLIENT_LIBS) \
++		$(ZLIB_LIBS) 
++
++
+ bin/net@EXEEXT@: $(BINARY_PREREQS) $(NET_OBJ) @BUILD_POPT@ $(LIBTALLOC) $(LIBTDB) $(LIBWBCLIENT) $(LIBNETAPI)
+ 	@echo Linking $@
+ 	@$(CC) -o $@ $(NET_OBJ) $(DYNEXP) $(LDFLAGS) $(LIBS) \
+diff -rupN samba-3.5.22.org/source3/smb3passchk/smb3passchk.c samba-3.5.22/source3/smb3passchk/smb3passchk.c
+--- samba-3.5.22.org/source3/smb3passchk/smb3passchk.c	1970-01-01 01:00:00.000000000 +0100
++++ samba-3.5.22/source3/smb3passchk/smb3passchk.c	2013-02-26 16:32:18.000000000 +0100
+@@ -0,0 +1,521 @@
++#include "includes.h"
++#include "client/client_proto.h"
++#include "../librpc/gen_ndr/cli_srvsvc.h"
++#include "libsmbclient.h"
++
++#ifndef REGISTER
++#define REGISTER 0
++#endif
++
++#include "version.h"
++#include "debug.h"
++#include "safe_string.h"
++#include <stdio.h>
++#include <errno.h>
++#include <sys/time.h>
++#include <string.h>
++#include <unistd.h>
++#include <stdlib.h>
++#include <syslog.h>
++
++#define MAXBUF 512
++#define MAXHOSTS 100
++#define NO_SYSLOG
++#define CONFIGFILE "/root/.smb/smb.conf"
++
++extern bool AllowDebugChange;
++static bool give_flags = False;
++static bool use_bcast = True;
++static bool got_bcast = False;
++static struct sockaddr_storage bcast_addr;
++static bool recursion_desired = False;
++static bool translate_addresses = False;
++static int ServerFD= -1;
++static int RootPort = False;
++static bool find_status=False;
++
++
++
++fstring cur_password;
++fstring cur_workgroup;
++fstring cur_username;
++fstring cur_wins;
++fstring hosts[MAXHOSTS];
++fstring firsttry;
++int maxhost=0;
++
++int debug;
++int global_id = 0;
++
++void help()
++{
++   fprintf(stderr,"Usage: smb2passchk [-h] [-d] [-u username]\n"
++                  "                   [-D domain] [-p password]\n"
++                  "                   [-B bcast address]|[-U unicast address]\n"
++                  "                   [-F first try domain controller]\n"
++                  "                   \n\n");
++   fprintf(stderr,"based on Samba Version %s\n\n",SAMBA_VERSION_STRING);
++   fprintf(stderr,"       -h   shows this help\n");
++   fprintf(stderr,"       -u   sets the username\n");
++   fprintf(stderr,"       -D   sets the domainname\n");
++   fprintf(stderr,"       -p   sets the password\n");
++   fprintf(stderr,"       -F   first try domain controller\n");
++   fprintf(stderr,"       -d   debug mode\n\n");
++}
++
++/****************************************************************************
++  open the socket communication
++  **************************************************************************/
++static bool open_sockets(void)
++{
++  struct sockaddr_storage ss;
++  const char *sock_addr = lp_socket_address();
++
++  if (!interpret_string_addr(&ss, sock_addr,
++                           AI_NUMERICHOST|AI_PASSIVE)) {
++           DEBUG(0,("open_sockets: unable to get socket address "
++                                   "from string %s", sock_addr));
++           return false;
++  }
++   
++  ServerFD = open_socket_in( SOCK_DGRAM,
++                             (RootPort ? 137 : 0),
++                             (RootPort ?   0 : 3),
++                             &ss, True );
++
++  if (ServerFD == -1){
++     printf("fifi failed on ServerFD\n");
++     return(False);
++  }
++
++  set_socket_options( ServerFD, "SO_BROADCAST" );
++
++  DEBUG(3, ("Socket opened.\n"));
++  return True;
++}
++
++/****************************************************************************
++turn a node status flags field into a string
++****************************************************************************/
++static char *node_status_flags(unsigned char flags)
++{
++	static fstring ret;
++	fstrcpy(ret,"");
++	
++	fstrcat(ret, (flags & 0x80) ? "<GROUP> " : "        ");
++	if ((flags & 0x60) == 0x00) fstrcat(ret,"B ");
++	if ((flags & 0x60) == 0x20) fstrcat(ret,"P ");
++	if ((flags & 0x60) == 0x40) fstrcat(ret,"M ");
++	if ((flags & 0x60) == 0x60) fstrcat(ret,"H ");
++	if (flags & 0x10) fstrcat(ret,"<DEREGISTERING> ");
++	if (flags & 0x08) fstrcat(ret,"<CONFLICT> ");
++	if (flags & 0x04) fstrcat(ret,"<ACTIVE> ");
++	if (flags & 0x02) fstrcat(ret,"<PERMANENT> ");
++	
++	return ret;
++}
++
++/****************************************************************************
++turn the NMB Query flags into a string
++****************************************************************************/
++static char *query_flags(int flags)
++{
++	static fstring ret1;
++	fstrcpy(ret1, "");
++
++	if (flags & NM_FLAGS_RS) fstrcat(ret1, "Response ");
++	if (flags & NM_FLAGS_AA) fstrcat(ret1, "Authoritative ");
++	if (flags & NM_FLAGS_TC) fstrcat(ret1, "Truncated ");
++	if (flags & NM_FLAGS_RD) fstrcat(ret1, "Recursion_Desired ");
++	if (flags & NM_FLAGS_RA) fstrcat(ret1, "Recursion_Available ");
++	if (flags & NM_FLAGS_B)  fstrcat(ret1, "Broadcast ");
++
++	return ret1;
++}
++
++/****************************************************************************
++do a node status query
++****************************************************************************/
++static void do_node_status(int fd, char *name, int type, 
++                           struct sockaddr_storage *pss)
++{
++	struct nmb_name nname;
++	int count, i, j;
++	struct node_status_ *status;
++	fstring cleanname;
++        char addr[INET6_ADDRSTRLEN];
++
++        print_sockaddr(addr, sizeof(addr), pss);
++
++	printf("Looking up status of %s\n",addr);
++	make_nmb_name(&nname, name, type);
++	status = node_status_query(fd,&nname,pss, &count,NULL);
++	if (status) {
++		for (i=0;i<count;i++) {
++			fstrcpy(cleanname, status[i].name);
++			for (j=0;cleanname[j];j++) {
++				if (!isprint((int)cleanname[j])) cleanname[j] = '.';
++			}
++			printf("\t%-15s <%02x> - %s\n",
++			       cleanname,status[i].type,
++			       node_status_flags(status[i].flags));
++		}
++		SAFE_FREE(status);
++	}
++	printf("\n");
++}
++
++
++/****************************************************************************
++send out one query
++****************************************************************************/
++static bool query_one(char *lookup, unsigned int lookup_type)
++{
++	int j, count, flags;
++	struct sockaddr_storage *ip_list=NULL;
++
++	if (got_bcast) {
++                char addr[INET6_ADDRSTRLEN];
++                print_sockaddr(addr, sizeof(addr), &bcast_addr);
++                d_printf("querying %s on %s\n", lookup, addr);
++		ip_list = name_query(ServerFD,lookup,lookup_type,use_bcast,
++				     use_bcast?True:recursion_desired,
++				     &bcast_addr,&count, &flags,NULL);
++	} else {
++                const struct in_addr *bcast;
++		for (j=iface_count() - 1;
++		     !ip_list && j >= 0;
++		     j--) {
++			char addr[INET6_ADDRSTRLEN];
++			struct sockaddr_storage bcast_ss;
++
++			bcast = iface_n_bcast_v4(j);
++			if (!bcast) {
++				continue;
++			}
++                        if (debug){
++	            	   fprintf(stderr,"querying %s on %s\n", 
++			   lookup, inet_ntoa(*bcast));
++                        }
++			ip_list = name_query(ServerFD,lookup,lookup_type,
++					     use_bcast,
++					     use_bcast?True:recursion_desired,
++					     &bcast_ss,&count, &flags,NULL);
++		}
++	}
++
++	if (give_flags)
++		printf("Flags: %s\n", query_flags(flags));
++
++	if (!ip_list) return False;
++
++	for (j=0;j<count;j++) {
++		if (translate_addresses) {
++               		char addr[INET6_ADDRSTRLEN];
++             		print_sockaddr(addr, sizeof(addr), &ip_list[j]);
++                        in_addr_t data; 
++                        data = inet_addr(addr);
++
++			struct hostent *host = 
++				gethostbyaddr(&data,sizeof(data), AF_INET);
++			if (host) {
++                                fstrcpy(hosts[maxhost],host->h_name);
++                                maxhost++;
++			}
++		}
++                if (debug){
++			char addr[INET6_ADDRSTRLEN];
++               		print_sockaddr(addr, sizeof(addr), &ip_list[j]);
++			printf("DEBUG:  found DC(%d) %s %s<%02x>\n",j+1,
++                               addr,lookup,lookup_type);
++                }
++	}
++
++	/* We can only do find_status if the ip address returned
++	   was valid - ie. name_query returned true.
++	*/
++	if (find_status) {
++		do_node_status(ServerFD, lookup, lookup_type, &ip_list[0]);
++	}
++
++	free(ip_list);
++
++	return (ip_list != NULL);
++}
++
++
++void auth_fn(const char *server, const char *share,
++	     char *workgroup, int wgmaxlen, char *username, int unmaxlen,
++	     char *password, int pwmaxlen)
++{
++  if (debug){
++     fprintf(stderr, "DEBUG:  need password for //%s/%s\n", server, share);
++     fprintf(stderr, "DEBUG:  workgroup: [%s]\n", cur_workgroup);
++     fprintf(stderr, "DEBUG:  username: [%s]\n", cur_username);
++     fprintf(stderr, "DEBUG:  password: [%s]\n", cur_password);
++  }
++
++  if (cur_workgroup[0]) strncpy(workgroup, cur_workgroup, wgmaxlen - 1);
++  if (cur_username[0])  strncpy(username, cur_username, unmaxlen - 1);
++
++
++  if (cur_password[0]) strncpy(password, cur_password, pwmaxlen - 1);
++
++}
++
++
++
++int dosmblogin(TALLOC_CTX *frame,char *host)
++{
++   int err;
++   int dh1;
++   fstring buff;
++   struct nmb_name called, calling;
++   struct sockaddr_storage ss;
++   struct cli_state *cli;
++   fstring server_name;
++   char name_type_hex[10];
++   int name_type = 0x20;
++   NTSTATUS status;
++   int msg_port=139;
++   uint32_t flags = 0;
++   struct dcerpc_binding *binding = NULL;
++   const char *binding_string = NULL;
++   int result = 0;
++
++
++
++   fstrcpy(server_name, host);
++   zero_sockaddr(&ss);
++
++   if (!(cli=cli_initialise())) {
++           d_printf("Connection to %s failed\n", host);
++           return 1;
++   }
++   status = dcerpc_parse_binding(frame, server_name, &binding);
++   if (!NT_STATUS_IS_OK(status)) {
++      if (debug){
++         fprintf(stderr, "DEBUG:  binding failed on '%s'\n",binding->host);
++      }
++      return(1);
++   }
++
++   init_names();
++   if (debug){
++      fprintf(stderr, "DEBUG:  using local name '%s'\n",global_myname());
++      fprintf(stderr, "DEBUG:  try to login at '%s'\n",binding->host);
++   }
++
++   status=cli_full_connection(&cli, global_myname(), binding->host,
++                              NULL, 0,
++                              "IPC$", "IPC",
++                              cur_username,
++                              cur_workgroup,
++                              cur_password,
++                              flags,
++                              true,
++                              NULL);
++   if (NT_STATUS_EQUAL(status,NT_STATUS_LOGON_FAILURE) ||
++       NT_STATUS_EQUAL(status,NT_STATUS_ACCOUNT_LOCKED_OUT)){
++      return(13);
++   }
++
++   if (!NT_STATUS_IS_OK(status)) {
++      return(2);
++   }
++
++   if (debug){
++      fprintf(stderr, "DEBUG:  smb login sucessfuly\n");
++   }
++   return(0);
++
++}
++
++int main(int argc, char *argv[])
++{
++   int err, fd, c,i, dirc;
++   fstring dirbuf;
++   unsigned int lookup_type = 0x0;
++   char *dirp;
++   struct stat st;
++   char *home=getenv("HOME");
++   FILE *F;
++   fstring lookup;
++   bool lookup_by_ip = False;
++   bool find_master=False;
++   char *p;
++   struct in_addr ip;
++   static fstring servicesf;
++   TALLOC_CTX *frame = talloc_stackframe();
++
++   DEBUGLEVEL = 1;
++   /* Prevent smb.conf setting from overridding */
++   AllowDebugChange = False;
++   memset(hosts,sizeof(hosts),0);
++   fstrcpy(cur_password,"");
++   fstrcpy(cur_workgroup,"WORKGROUP");
++   fstrcpy(firsttry,"");
++   fstrcpy(cur_username,"nobody");
++   fstrcpy(cur_wins,"");
++   debug=0;
++   while(1){
++      c=getopt(argc,argv,"dhu:p:D:B:U:F:");
++      if (c==-1) break;
++      switch(c){
++         case 'd':debug=255;
++                  DEBUGLEVEL=255;
++                  break;
++         case '?':
++         case 'h':help();
++                  exit(1);
++                  break;
++         case 'u':fstrcpy(cur_username,optarg);
++                  break;
++         case 'F':fstrcpy(firsttry,optarg);
++                  break;
++         case 'D':fstrcpy(cur_workgroup,optarg);
++                  break;
++         case 'p':fstrcpy(cur_password,optarg);
++                  break;
++         case 'B':fstrcpy(cur_wins,optarg);
++                  got_bcast = True;
++                  use_bcast = True;
++                  recursion_desired = True;
++                  translate_addresses =True;
++                  break;
++         case 'U':fstrcpy(cur_wins,optarg);
++                  got_bcast = True;
++                  use_bcast = False;
++                  recursion_desired = True;
++                  translate_addresses =True;
++                  break;
++      }
++   }
++   if (home==NULL){
++      putenv("HOME=/root");
++      home=getenv("HOME");
++   }
++   fstrcpy(dirbuf,home);
++   fstrcat(dirbuf,"/.smb");
++   err=stat(dirbuf,&st);
++   if (err || !(st.st_mode && S_IFDIR)){
++      if (debug){
++         fprintf(stderr,"DEBUG:  directory '%s' does not exists\n",dirbuf);
++      }
++      if (mkdir(dirbuf,0700)){
++         fprintf(stderr,"ERROR:  can't create directory '%s'\n",dirbuf);
++         exit(1);
++      }
++   }
++   fstrcat(dirbuf,"/smb.conf");
++   err=stat(dirbuf,&st);
++   if (err || !(st.st_mode && (S_IFREG||S_IFLNK))){
++      if (debug){
++         fprintf(stderr,"DEBUG:  config '%s' does not exists\n",dirbuf);
++      }
++      if (F=fopen(dirbuf,"w+")){
++         fclose(F);
++      }
++      else{
++         fprintf(stderr,"ERROR:  can't create directory '%s'\n",dirbuf);
++         exit(1);
++      }
++   }
++   if (!strlen(cur_password)){
++      if (debug) system("stty -echo");
++      fprintf(stdout, "Enter password: [%s] ", cur_password);
++      fgets(cur_password, sizeof(cur_password), stdin);
++      fprintf(stdout,"\n");
++      if (debug) system("stty echo");
++   }
++   if (cur_password[strlen(cur_password) - 1] == 0x0a) /* A new line? */
++      cur_password[strlen(cur_password) - 1] = 0x00;
++
++
++   TimeInit();
++   load_case_tables();
++
++   setup_logging(argv[0],True);
++   DEBUGLEVEL_CLASS[DBGC_ALL] = 1;
++
++//   charset_initialise();
++   if (interpret_string_addr(&bcast_addr,cur_wins,0)){
++      got_bcast = True;
++      use_bcast = False;
++      translate_addresses = True;
++      recursion_desired = True;
++   }
++   else{
++      exit(255);
++   }
++   fstrcpy(servicesf,dirbuf);
++   if (!lp_load(servicesf,True,False,False,True)) {
++      fprintf(stderr, "Can't load %s - run testparm to debug it\n", servicesf);
++   }
++   load_interfaces();
++   if (!open_sockets()) return(1);
++
++   fstrcpy(lookup,cur_workgroup);
++   lookup_type=0x1c;
++   if (!query_one(lookup, lookup_type)) {
++     printf( "name_query failed to find name %s", lookup );
++     if( 0 != lookup_type )
++       printf( "#%02x", lookup_type );
++     printf( "\n" );
++   }
++   if (strlen(firsttry)) fstrcpy(hosts[0],firsttry);
++   for(c=0;c<MAXHOSTS;c++){
++      if (!strlen(hosts[c])) exit(1);
++      if (debug){
++         fprintf(stderr,"DEBUG:  Check Host %s ...\n",hosts[c]);
++      }
++      err=dosmblogin(frame,hosts[c]);
++      if (debug){
++         fprintf(stderr,"DEBUG:  ... exitcode=%d on host %s\n",err,hosts[c]);
++      }
++      if (err==0){
++         if (debug){
++            fprintf(stderr,"DEBUG:  OK\n");
++         }
++         exit(0);
++      }
++      if (err==13){
++         if (debug){
++            fprintf(stderr,"ERROR:  %s on host %s\n",strerror(err),hosts[c]);
++         }
++         exit(err);
++      }
++   }
++   if (debug){
++      fprintf(stderr,"ERROR:  can't find any useable auth host (255)\n");
++   }
++   TALLOC_FREE(frame);
++
++   exit(255);
++}
++
++///////////////////////////////////////////////////////////////
