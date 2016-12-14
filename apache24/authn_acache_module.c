@@ -24,6 +24,7 @@
 
 typedef struct authn_cache_config_struct {
     int   acctolower;
+    const char *seplist;
 } authn_cache_config_rec;
 
 module AP_MODULE_DECLARE_DATA authn_acache_module;
@@ -33,8 +34,20 @@ static void *create_authn_acache_dir_config(apr_pool_t *p, char *d)
    authn_cache_config_rec *sec =apr_pcalloc(p, sizeof(*sec));
 
    sec->acctolower=0;
+   sec->seplist = "/_\\";
 
    return sec;
+}
+
+static const char *add_seplist(cmd_parms *cmd, void *config,
+                                      const char *args)
+{
+    authn_cache_config_rec *conf = (authn_cache_config_rec *)config;
+
+    //ap_log_error(APLOG_MARK, APLOG_ERR | APLOG_STARTUP, APR_SUCCESS, NULL, 
+    //                 "aeDomainSeperator ars=%s",args);
+    conf->seplist=args;
+    return(NULL);
 }
 
 static const command_rec authn_acache_cmds[] =
@@ -44,6 +57,10 @@ static const command_rec authn_acache_cmds[] =
                  OR_AUTHCFG,
                  "Set to 'yes' if the the typed in Account should convert "
                  "to lower"),
+    AP_INIT_RAW_ARGS("aeDomainSeperator", add_seplist,
+                 (void *)APR_OFFSETOF(authn_cache_config_rec, seplist),
+                 OR_AUTHCFG,
+                 "List of valid Seperators between domain and account"),
     {NULL}
 };
 
@@ -55,20 +72,44 @@ static authn_status check_password(request_rec *r, const char *user,
                                    const char *password)
 {
    apr_status_t rv;
-   int        res,code;
+   int        res,code,c,s;
    char       wpassword[255];
    char       wusername[255];
+   char       *puser;
    authn_cache_config_rec *conf = ap_get_module_config(r->per_dir_config,
                                                        &authn_acache_module);
+
+   if (user!=NULL){
+      puser=(char *)user;  // dirty hack, to allow modifications of const char *
+
+      // If  aeAccountToLower is set
+      if (conf->acctolower){
+        for(c=0;c<strlen(puser);c++){
+            puser[c]=tolower((int)puser[c]);
+         }
+      }
+      // aeDomainSeperator handling
+      if (conf->seplist && strlen(conf->seplist)){
+         if (puser){
+            for(c=0;c<strlen(puser);c++){
+               for(s=0;s<strlen(conf->seplist);s++){
+                  if (conf->seplist[s]==user[c]){
+                     puser[c]='/';
+                     break;
+                  }
+               }
+               if (puser[c]=='/') break;
+            }
+         }
+      }
+
+
+   }
    ap_log_rerror(APLOG_MARK,APLOG_DEBUG,APR_SUCCESS,r,
                  "DEBUG:acache_check_password(%d)",getpid());
 
    if (password && user && strlen(password) && strlen(user)){
       apr_cpystrn(wpassword,password,255);
-      // If  aeAccountToLower is set
-      if (conf->acctolower){
-         ap_str_tolower((char *)user);
-      }
       apr_cpystrn(wusername,user,255);
       code=CliCachelogin(wusername,wpassword);
       if (code>0 || code<0){
