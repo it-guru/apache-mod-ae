@@ -27,7 +27,7 @@
 #define MAXCACHE 1000
 #define MAXHELPER 200
 #define MAXCTIME 900
-#define ACACHEID  "acache V0.27 by hartmut.vogler@t-systems.com (c) 2014"
+#define ACACHEID  "acache V0.30 by hartmut.vogler@t-systems.com (c) 2016"
 
 typedef struct _HelperEntry
 {
