@@ -27,7 +27,10 @@
 #define MAXCACHE 1000
 #define MAXHELPER 200
 #define MAXCTIME 900
-#define ACACHEID  "acache V0.30 by hartmut.vogler@t-systems.com (c) 2016"
+#define ACACHEID  "acache V0.31 by hartmut.vogler@t-systems.com (c) 2018"
+
+#define MAXPASSLEN 40
+#define MAXNAMELEN 50
 
 typedef struct _HelperEntry
 {
@@ -45,8 +48,8 @@ typedef struct _Helper
 
 typedef struct _CacheEntry
 {
-   char   name[50];
-   char   pass[20];
+   char   name[MAXNAMELEN];
+   char   pass[MAXPASSLEN];
    time_t cdate;
    time_t mdate;
    time_t adate;

@@ -224,6 +224,18 @@ int SetCacheStatus(ServerConfig *cfg,char *loginname,char *password,int st)
          syslog(LOG_WARNING,"WARN: out of cache space!!!");
          #endif
       }
+      else if (strlen(loginname) >= MAXNAMELEN-1){
+         #ifdef LOG_WARNING
+         syslog(LOG_WARNING,"WARN: reject acache store "
+                            "due oversized loginname");
+         #endif
+      }
+      else if (strlen(password) >= MAXPASSLEN-1){
+         #ifdef LOG_WARNING
+         syslog(LOG_WARNING,"WARN: reject acache store "
+                            "due oversized password");
+         #endif
+      }
       else{
          if (debug){
             syslog(LOG_INFO,"Append \"%s\" at cache pos %d",
