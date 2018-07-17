@@ -29,7 +29,7 @@
 #define MAXCTIME 900
 #define ACACHEID  "acache V0.31 by hartmut.vogler@t-systems.com (c) 2018"
 
-#define MAXPASSLEN 40
+#define MAXPASSLEN 80
 #define MAXNAMELEN 50
 
 typedef struct _HelperEntry
