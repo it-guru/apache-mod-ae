@@ -20,4 +20,4 @@ client    : client.o common.o cliapi.o
 	    ar cr ../lib/libacache.a $@ 
 
 clean     : 
-	rm -f *.o ../lib/*.a ../bin/* 
+	rm -f *.o ../lib/*.a ../bin/* acache client

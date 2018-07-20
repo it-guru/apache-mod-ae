@@ -1,6 +1,9 @@
 #include <acache.h>
 #include <unistd.h>
 #include <fcntl.h>
+//#include <sys/types.h>
+#include <sys/wait.h>
+
 
 #define LOCKTIME 3600
 int runserver;
@@ -13,6 +16,11 @@ int sfactor;
 ServerConfig *curcfg;
 
 int InitServer(ServerConfig *,char *);
+int RunServer(ServerConfig *cfg);
+int LockCacheWrite(ServerConfig *cfg);
+int UnLockCacheWrite(ServerConfig *cfg);
+int GetAuthState(ServerConfig *cfg,char *loginname,char *Domain,
+                 char *User,char *password,int c);
 
 void help()
 {
