@@ -17,6 +17,7 @@ client    : client.o common.o cliapi.o
 
 %.o       : %.c ../include/acache.h Makefile
 	    $(CC) -fPIC -c $(CFLAGS) -o $@ $<
+	    (mkdir -p ../lib 2>/dev/null)
 	    ar cr ../lib/libacache.a $@ 
 
 clean     : 
