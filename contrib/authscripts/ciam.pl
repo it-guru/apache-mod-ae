@@ -141,12 +141,12 @@ $parser->handler(start=>sub {
 },'self, tagname, attr');
 
 $parser->parse($response->content());
-if (!exists($form{email}) || !exists($form{password})){
-   printf STDERR ("ERROR: can not found email or password field in form\n");
+if (!exists($form{userId}) || !exists($form{password})){
+   printf STDERR ("ERROR: can not found userId or password field in form\n");
    exit(1);
 }
 
-$form{email}=$username;
+$form{userId}=$username;
 $form{password}=$password;
 
 my $request=POST($ciamurl,Content_Type=>'application/x-www-form-urlencoded',
