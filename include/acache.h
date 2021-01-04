@@ -24,13 +24,13 @@
 
 
 
-#define MAXCACHE 1000
-#define MAXHELPER 200
-#define MAXCTIME 900
-#define ACACHEID  "acache V0.31 by hartmut.vogler@t-systems.com (c) 2018"
+#define AEMAXCACHE 1000
+#define AEMAXHELPER 200
+#define AEMAXCTIME 900
+#define ACACHEID  "acache V0.32 by hartmut.vogler@t-systems.com (c) 2021"
 
-#define MAXPASSLEN 80
-#define MAXNAMELEN 50
+#define AEMAXPASSLEN 80
+#define AEMAXNAMELEN 50
 
 typedef struct _HelperEntry
 {
@@ -42,14 +42,14 @@ typedef struct _HelperEntry
 
 typedef struct _Helper
 {
-   HelperEntry entry[MAXHELPER];
+   HelperEntry entry[AEMAXHELPER];
    int         n;
 } Helper;
 
 typedef struct _CacheEntry
 {
-   char   name[MAXNAMELEN];
-   char   pass[MAXPASSLEN];
+   char   name[AEMAXNAMELEN];
+   char   pass[AEMAXPASSLEN];
    time_t cdate;
    time_t mdate;
    time_t adate;
@@ -60,7 +60,7 @@ typedef struct _CacheEntry
 typedef struct _Cache
 {
    Helper     helper;
-   CacheEntry entry[MAXCACHE];
+   CacheEntry entry[AEMAXCACHE];
    int        n;
    int        maxused;
    int        cachehits;

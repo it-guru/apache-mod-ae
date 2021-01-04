@@ -61,7 +61,7 @@ int main(int argn,char **argv)
    int          v;
    ServerConfig cfg;
 
-   maxctime=MAXCTIME;
+   maxctime=AEMAXCTIME;
    debug=0;
    nofork=0;
    slevel=0;
@@ -227,18 +227,18 @@ int SetCacheStatus(ServerConfig *cfg,char *loginname,char *password,int st)
       if (debug){
          fprintf( stderr, "cfg->c->n: %d\n",cfg->c->n );
       }
-      if (cfg->c->n>MAXCACHE-2){
+      if (cfg->c->n>AEMAXCACHE-2){
          #ifdef LOG_WARNING
          syslog(LOG_WARNING,"WARN: out of cache space!!!");
          #endif
       }
-      else if (strlen(loginname) >= MAXNAMELEN-1){
+      else if (strlen(loginname) >= AEMAXNAMELEN-1){
          #ifdef LOG_WARNING
          syslog(LOG_WARNING,"WARN: reject acache store "
                             "due oversized loginname");
          #endif
       }
-      else if (strlen(password) >= MAXPASSLEN-1){
+      else if (strlen(password) >= AEMAXPASSLEN-1){
          #ifdef LOG_WARNING
          syslog(LOG_WARNING,"WARN: reject acache store "
                             "due oversized password");
@@ -745,11 +745,11 @@ void DumpStatus(int sig)
    syslog(LOG_INFO," uptime                 : %d sec",time(NULL)-starttime);
    syslog(LOG_INFO," current cache entrys   : %d",curcfg->c->n);
    syslog(LOG_INFO," max uesed cache entrys : %d of max %d",
-          curcfg->c->maxused,MAXCACHE);
+          curcfg->c->maxused,AEMAXCACHE);
    syslog(LOG_INFO," querys                 : %d",curcfg->c->accesscount);
    syslog(LOG_INFO," cache hits             : %d",curcfg->c->cachehits);
    syslog(LOG_INFO," domain configurations  : %d von max %d",
-          curcfg->c->helper.n,MAXHELPER);
+          curcfg->c->helper.n,AEMAXHELPER);
    syslog(LOG_INFO," failed logins          : %d",curcfg->c->loginfail);
    syslog(LOG_INFO," valid logins           : %d",curcfg->c->loginok);
    syslog(LOG_INFO,"------------ Cache Entrys ------------------");
