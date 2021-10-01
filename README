@@ -132,6 +132,23 @@ are startupscripts for different operating systems
                            (Switch NOT availabel starting from Apache 2.4)
                            default: "/\_"
 
+    aeSSOUser              Username to handle BasicAuth SSO Access
+                           (Switch availabel starting from Apache 2.4)
+                           default: none
+                           
+    aeSSOPass              Password to handle BasicAuth SSO Access
+                           (Switch availabel starting from Apache 2.4)
+                           default: none
+
+    aeSSOHeaderUserAttr    Header Attribute with real Username from SSO
+                           (Switch availabel starting from Apache 2.4)
+                           default: none
+  
+    aeSSODomain            Domain-Prefix to add  real Username from SSO to
+                           create a real Username to CGI Application
+                           (Switch availabel starting from Apache 2.4)
+                           default: none
+                           
 
 4.1  Structure of /etc/acache.conf
 ----------------------------------
@@ -225,5 +242,20 @@ must be readed from stdin from the authentification command.
       require valid-user
    </Limit>
  </Directory>
+
+In Apache 2.4 Enviroments, it is posible to add WebSSO handling. To
+allow WebSSO, you have to add these config variables:
+
+  aeSSOUser           SSOUser
+  aeSSOPass           SSOPass
+  aeSSODomain         mydomain/
+  aeSSOHeaderUserAttr ssouserid
+
+In aeSSOUser:aeSSOPass a static credential must be negotiated
+with your SSO provider. In aeSSOHeaderUserAttr your SSO
+provider must send the authenticated userid as a specified
+HTTP-Header variable.
+If aeSSODomain is specifed, in front of the username from 
+the aeSSOHeaderUserAttr field, the domain is specifed.
 
 

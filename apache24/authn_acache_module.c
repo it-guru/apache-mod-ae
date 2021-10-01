@@ -25,6 +25,10 @@
 typedef struct authn_cache_config_struct {
     int   acctolower;
     const char *seplist;
+    const char *SSOUser;
+    const char *SSOPass;
+    const char *SSOHeaderUserAttr;
+    const char *SSODomain;
 } authn_cache_config_rec;
 
 module AP_MODULE_DECLARE_DATA authn_acache_module;
@@ -35,33 +39,88 @@ static void *create_authn_acache_dir_config(apr_pool_t *p, char *d)
 
    sec->acctolower=0;
    sec->seplist = "/_\\";
+   sec->SSOUser = NULL;
+   sec->SSOPass = NULL;
+   sec->SSOHeaderUserAttr = NULL;
+   sec->SSODomain = NULL;
 
    return sec;
 }
 
 static const char *add_seplist(cmd_parms *cmd, void *config,
+                                       const char *args)
+{
+   authn_cache_config_rec *conf = (authn_cache_config_rec *)config;
+
+   conf->seplist=args;
+   return(NULL);
+}
+
+
+static const char *add_SSOUser(cmd_parms *cmd, void *config,
                                       const char *args)
 {
-    authn_cache_config_rec *conf = (authn_cache_config_rec *)config;
+   authn_cache_config_rec *conf = (authn_cache_config_rec *)config;
 
-    //ap_log_error(APLOG_MARK, APLOG_ERR | APLOG_STARTUP, APR_SUCCESS, NULL, 
-    //                 "aeDomainSeperator ars=%s",args);
-    conf->seplist=args;
-    return(NULL);
+   conf->SSOUser=args;
+   return(NULL);
+}
+
+static const char *add_SSOPass(cmd_parms *cmd, void *config,
+                                      const char *args)
+{
+   authn_cache_config_rec *conf = (authn_cache_config_rec *)config;
+
+   conf->SSOPass=args;
+   return(NULL);
+}
+
+static const char *add_SSOHeaderUserAttr(cmd_parms *cmd, void *config,
+                                      const char *args)
+{
+   authn_cache_config_rec *conf = (authn_cache_config_rec *)config;
+
+   conf->SSOHeaderUserAttr=args;
+   return(NULL);
+}
+
+static const char *add_SSODomain(cmd_parms *cmd, void *config,
+                                      const char *args)
+{
+   authn_cache_config_rec *conf = (authn_cache_config_rec *)config;
+
+   conf->SSODomain=args;
+   return(NULL);
 }
 
 static const command_rec authn_acache_cmds[] =
 {
-    AP_INIT_FLAG("aeAccountToLower", ap_set_flag_slot,
-                 (void *)APR_OFFSETOF(authn_cache_config_rec, acctolower),
-                 OR_AUTHCFG,
-                 "Set to 'yes' if the the typed in Account should convert "
-                 "to lower"),
-    AP_INIT_RAW_ARGS("aeDomainSeperator", add_seplist,
-                 (void *)APR_OFFSETOF(authn_cache_config_rec, seplist),
-                 OR_AUTHCFG,
-                 "List of valid Seperators between domain and account"),
-    {NULL}
+   AP_INIT_FLAG("aeAccountToLower", ap_set_flag_slot,
+                (void *)APR_OFFSETOF(authn_cache_config_rec, acctolower),
+                OR_AUTHCFG,
+                "Set to 'yes' if the the typed in Account should convert "
+                "to lower"),
+   AP_INIT_RAW_ARGS("aeDomainSeperator", add_seplist,
+                (void *)APR_OFFSETOF(authn_cache_config_rec, seplist),
+                OR_AUTHCFG,
+                "List of valid Seperators between domain and account"),
+   AP_INIT_RAW_ARGS("aeSSOUser", add_SSOUser,
+                (void *)APR_OFFSETOF(authn_cache_config_rec, seplist),
+                OR_AUTHCFG,
+                "SSO User-Account"),
+   AP_INIT_RAW_ARGS("aeSSOPass", add_SSOPass,
+                (void *)APR_OFFSETOF(authn_cache_config_rec, seplist),
+                OR_AUTHCFG,
+                "SSO Password"),
+   AP_INIT_RAW_ARGS("aeSSOHeaderUserAttr", add_SSOHeaderUserAttr,
+                (void *)APR_OFFSETOF(authn_cache_config_rec, seplist),
+                OR_AUTHCFG,
+                "SSO Header-Variable name from which username get"),
+   AP_INIT_RAW_ARGS("aeSSODomain", add_SSODomain,
+                (void *)APR_OFFSETOF(authn_cache_config_rec, seplist),
+                OR_AUTHCFG,
+                "SSO Domain to add bevor Username"),
+   {NULL}
 };
 
 module AP_MODULE_DECLARE_DATA authn_acache_module;
@@ -71,14 +130,39 @@ module AP_MODULE_DECLARE_DATA authn_acache_module;
 static authn_status check_password(request_rec *r, const char *user,
                                    const char *password)
 {
-   apr_status_t rv;
+   apr_status_t rv=NULL;
    int        res,code,c,s;
    char       wpassword[255];
    char       wusername[255];
    char       *puser;
+   const apr_array_header_t    *fields;
+   int                         i;
+   int                         foundHeaderUserAttr=0;
+   apr_table_entry_t           *e = 0;
    authn_cache_config_rec *conf = ap_get_module_config(r->per_dir_config,
                                                        &authn_acache_module);
 
+   if (user!=NULL && conf->SSOUser && !strcmp(user,conf->SSOUser)){
+      r->user=apr_pstrdup(r->pool,"anonymous");
+      res=AUTH_GRANTED;
+      if (conf->SSOHeaderUserAttr!=NULL){
+         fields = apr_table_elts(r->headers_in);
+         e = (apr_table_entry_t *) fields->elts;
+         for(i = 0; i < fields->nelts; i++) {
+            if (!strcmp(conf->SSOHeaderUserAttr,e[i].key)){
+               r->user=apr_pstrdup(r->pool,e[i].val);
+               foundHeaderUserAttr++;
+            }
+         }
+         if (!foundHeaderUserAttr){
+            res=AUTH_DENIED;
+         }
+      } 
+      if (conf->SSODomain!=NULL){
+         r->user=apr_pstrcat(r->pool,conf->SSODomain,r->user,NULL);
+      }
+      return(res);
+   }
    if (user!=NULL){
       puser=(char *)user;  // dirty hack, to allow modifications of const char *
 
@@ -107,6 +191,10 @@ static authn_status check_password(request_rec *r, const char *user,
    }
    ap_log_rerror(APLOG_MARK,APLOG_DEBUG,APR_SUCCESS,r,
                  "DEBUG:acache_check_password(%d)",getpid());
+
+
+
+
 
    if (password && user && strlen(password) && strlen(user)){
       apr_cpystrn(wpassword,password,255);
