@@ -29,6 +29,8 @@
     4.2  Structure of /etc/aetools.conf
 
 5.0  Apache configuration
+    5.1  SSO config
+        5.1.1 SSO bypass BasicAuth dialog in Browser
 
 #######################################################################
 
@@ -243,6 +245,11 @@ must be readed from stdin from the authentification command.
    </Limit>
  </Directory>
 
+5.1  SSO config
+---------------
+SSO (SingleSignLogon) is at the first glance not compatible with
+BasicAuth like in this module is propageted - but only at first glance: 
+
 In Apache 2.4 Enviroments, it is posible to add WebSSO handling. To
 allow WebSSO, you have to add these config variables:
 
@@ -255,7 +262,39 @@ In aeSSOUser:aeSSOPass a static credential must be negotiated
 with your SSO provider. In aeSSOHeaderUserAttr your SSO
 provider must send the authenticated userid as a specified
 HTTP-Header variable.
+
 If aeSSODomain is specifed, in front of the username from 
 the aeSSOHeaderUserAttr field, the domain is specifed.
+
+5.1.1  SSO bypass BasicAuth dialog in Browser
+---------------------------------------------
+If aeSSOBasicAuthUser is specified (space sperated list), this
+Account will be granted without any password. f.e.:
+
+  aeSSOBasicAuthUser  sso SSO
+
+To redirect this Account to WebSSO Page, add this rewrite rule:
+
+RewriteCond %{LA-U:REMOTE_USER} ^(sso|SSO)$
+RewriteRule ^/(.*) https://websso.site.com/sso-namespace/$1 [R,END]
+
+If this is configured, you can bypass the basic auth
+dialog in Browser by specifiy SSO User direct in url:
+
+https://SSO:@mylocal.site/direct/path/in/my/site
+
+If Users access throw ...
+https://mylocal.site/direct/path/in/my/site
+... they can user username sso oder SSO and they will
+be automatic redirected to SSO Login-Page (if the not 
+already Logged in in SSO).
+
+Attention: If you use aeSSOBasicAuthUser, it is mandatory
+to add the rewrite rule as above! - If you don't do this,
+the aeSSOBasicAuthUser will be passed to your application
+as valid REMOTE_USER!
+
+
+--
 
 

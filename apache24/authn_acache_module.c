@@ -29,6 +29,7 @@ typedef struct authn_cache_config_struct {
     const char *SSOPass;
     const char *SSOHeaderUserAttr;
     const char *SSODomain;
+    const char *SSOBasicAuthUser;
 } authn_cache_config_rec;
 
 module AP_MODULE_DECLARE_DATA authn_acache_module;
@@ -43,6 +44,7 @@ static void *create_authn_acache_dir_config(apr_pool_t *p, char *d)
    sec->SSOPass = NULL;
    sec->SSOHeaderUserAttr = NULL;
    sec->SSODomain = NULL;
+   sec->SSOBasicAuthUser = NULL;
 
    return sec;
 }
@@ -93,6 +95,15 @@ static const char *add_SSODomain(cmd_parms *cmd, void *config,
    return(NULL);
 }
 
+static const char *add_SSOBasicAuthUser(cmd_parms *cmd, void *config,
+                                      const char *args)
+{
+   authn_cache_config_rec *conf = (authn_cache_config_rec *)config;
+
+   conf->SSOBasicAuthUser=args;
+   return(NULL);
+}
+
 static const command_rec authn_acache_cmds[] =
 {
    AP_INIT_FLAG("aeAccountToLower", ap_set_flag_slot,
@@ -120,6 +131,10 @@ static const command_rec authn_acache_cmds[] =
                 (void *)APR_OFFSETOF(authn_cache_config_rec, seplist),
                 OR_AUTHCFG,
                 "SSO Domain to add bevor Username"),
+   AP_INIT_RAW_ARGS("aeSSOBasicAuthUser", add_SSOBasicAuthUser,
+                (void *)APR_OFFSETOF(authn_cache_config_rec, seplist),
+                OR_AUTHCFG,
+                "BasicAuth Username, to redirect to SSO URL/Namespace"),
    {NULL}
 };
 
@@ -134,13 +149,30 @@ static authn_status check_password(request_rec *r, const char *user,
    int        res,code,c,s;
    char       wpassword[255];
    char       wusername[255];
-   char       *puser;
+   char       *puser,*pBasicAuthUser,*plastuser;
    const apr_array_header_t    *fields;
    int                         i;
    int                         foundHeaderUserAttr=0;
    apr_table_entry_t           *e = 0;
    authn_cache_config_rec *conf = ap_get_module_config(r->per_dir_config,
                                                        &authn_acache_module);
+
+
+   if (conf->SSOBasicAuthUser && !strcmp(password,"")){
+      pBasicAuthUser=apr_pstrdup(r->pool,conf->SSOBasicAuthUser);
+      puser=apr_strtok(pBasicAuthUser," ",&plastuser);
+      while (puser != NULL) {
+         //ap_log_rerror(APLOG_MARK, APLOG_NOERRNO|APLOG_ERR,rv, r,
+         //                   APLOGNO(10000)
+         //                   "check User: %s", puser);
+         if (!strcmp(user,puser)){
+            res=AUTH_GRANTED;
+            return(res);
+         }
+         puser=apr_strtok(NULL," ", &plastuser);
+      }
+   }
+
 
    if (user!=NULL && conf->SSOUser && !strcmp(user,conf->SSOUser)){
       r->user=apr_pstrdup(r->pool,"anonymous");
