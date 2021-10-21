@@ -158,7 +158,8 @@ static authn_status check_password(request_rec *r, const char *user,
                                                        &authn_acache_module);
 
 
-   if (conf->SSOBasicAuthUser && !strcmp(password,"")){
+   if (conf->SSOBasicAuthUser && (!strcmp(password,"") || 
+                                  !strcmp(password,user))){
       pBasicAuthUser=apr_pstrdup(r->pool,conf->SSOBasicAuthUser);
       puser=apr_strtok(pBasicAuthUser," ",&plastuser);
       while (puser != NULL) {
