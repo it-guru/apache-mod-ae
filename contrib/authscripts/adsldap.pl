@@ -26,6 +26,12 @@ $user=~s/[^a-z0-9\@_.-]/x/gi;
 
 printf STDERR ("using: $user\n");
 
+local $SIG{ALRM}=sub{ 
+   printf STDERR ("Timeout Exitcode=101\n");
+   exit(101);
+};
+alarm(30);
+
 my $bind = join('\\', $domain, $user);
 my $chkFilter="sAMAccountName=".uc($user);
 my $base="DC=$domain,DC=cds,DC=t-internal,DC=com";
@@ -54,7 +60,7 @@ my $ldap = Net::LDAP->new($host,
 $mesg=$ldap->bind($bind,password=>$pass);
 if ($mesg){
    $mesg=$ldap->search(base=>$base,filter=>$chkFilter,attrs=>['dn']);
-   if (defined($mesg) && $mesg->entries){
+   if (ref($mesg) && $mesg->entries){
       foreach my $entr ($mesg->entries()) {
         printf("DN: '%s'\n",$entr->dn);
       }   
