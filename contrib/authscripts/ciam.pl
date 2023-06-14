@@ -112,7 +112,8 @@ if (!($username=~m/^.+\@.+$/)){
 my $password=<STDIN>;
 $password=~s/\s$//;
 #printf STDERR ("using CIAM URL='%s'\nusername='%s'\n",$ciamurl,$username);
-
+my $uaCookies=HTTP::Cookies->new();
+$ua->cookie_jar($uaCookies);
 my $response=$ua->request(GET($ciamurl));
 if ($response->code ne "200"){
    print STDERR ($response->content());
@@ -162,7 +163,20 @@ if (grep(/Your e-mail address or password is incorrect/,$response->content())||
    printf STDERR ("Your e-mail address or password is incorrect\n");
    exit(1);
 }
-if (!grep(/var\s+redir\s+=\s+base/,$response->content())){
+
+$uaCookies->extract_cookies($response);
+
+my $loginOK=0;
+$uaCookies->scan(sub{
+   my $version=shift;
+   my $key=shift;
+   my $val=shift;
+
+   $loginOK++ if ($key eq "PD-S-SESSION-ID" && $val ne "");
+   $loginOK++ if ($key eq "PD-ID" && $val ne "");
+});
+
+if ($loginOK!=2){
    printf STDERR ("unexpected OK response page\n");
    exit(1);
 }
