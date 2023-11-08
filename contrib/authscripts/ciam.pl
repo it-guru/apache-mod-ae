@@ -127,7 +127,7 @@ my %form=();
 
 $parser->handler(start=>sub {
    my ($pself,$tag,$attr)=@_;
-   if (lc($tag) eq "input"){
+   if (lc($tag) eq "input" || lc($tag) eq "scale-text-field"){
       if (exists($form{"$attr->{name}"}) &&
           !ref($form{"$attr->{name}"})){
          $form{"$attr->{name}"}=[$form{"$attr->{name}"}];
