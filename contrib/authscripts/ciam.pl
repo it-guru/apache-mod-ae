@@ -146,6 +146,7 @@ if (!exists($form{userId}) || !exists($form{password})){
    printf STDERR ("ERROR: can not found userId or password field in form\n");
    exit(1);
 }
+#printf STDERR ("form=%s\n",Dumper(\%form));
 
 $form{userId}=$username;
 $form{password}=$password;
@@ -171,9 +172,12 @@ $uaCookies->scan(sub{
    my $version=shift;
    my $key=shift;
    my $val=shift;
-
-   $loginOK++ if ($key eq "PD-S-SESSION-ID" && $val ne "");
-   $loginOK++ if ($key eq "PD-ID" && $val ne "");
+   if (($key=~m/AMWEBJCT!.*!WEBLOGIN-SESSIONID$/) && $val ne ""){
+      $loginOK++;
+   }
+   if (($key=~m/AMWEBJCT!.*!WEBLOGIN-STICKYSESSIONID$/) && $val ne ""){
+      $loginOK++;
+   }
 });
 
 if ($loginOK!=2){
